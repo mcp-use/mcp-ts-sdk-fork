@@ -1,0 +1,137 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM UTC
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/modelcontextprotocol/typescript-sdk.git
+          git fetch upstream
+      
+      - name: Check for upstream changes
+        id: check
+        run: |
+          UPSTREAM_VERSION=$(git show upstream/main:package.json | jq -r .version)
+          CURRENT_BASE=$(git show main:package.json | jq -r .version | cut -d'-' -f1)
+          
+          echo "upstream_version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+          echo "current_base=$CURRENT_BASE" >> $GITHUB_OUTPUT
+          
+          if [ "$UPSTREAM_VERSION" = "$CURRENT_BASE" ]; then
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "✅ Already synced with upstream $UPSTREAM_VERSION"
+          else
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "🚀 Update available: $CURRENT_BASE → $UPSTREAM_VERSION"
+          fi
+      
+      - name: Merge upstream changes
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          UPSTREAM_VERSION="${{ steps.check.outputs.upstream_version }}"
+          BRANCH_NAME="sync/upstream-${UPSTREAM_VERSION}"
+          
+          git checkout -b "$BRANCH_NAME"
+          
+          # Merge upstream main, auto-resolve conflicts favoring our changes in critical files
+          git merge upstream/main --no-edit || true
+          
+          # If there are conflicts, resolve them
+          if [ -f package.json ] && git diff --name-only --diff-filter=U | grep -q package.json; then
+            # Update version with mcp-use suffix after merge
+            node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${UPSTREAM_VERSION}-mcp-use.1';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+            git add package.json
+          fi
+          
+          # Complete merge if needed
+          if git status | grep -q "You have unmerged paths"; then
+            git commit --no-edit
+          fi
+          
+          # Ensure version is correct
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (!pkg.version.includes('-mcp-use')) {
+            pkg.version = '${UPSTREAM_VERSION}-mcp-use.1';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          }
+          "
+          
+          git add package.json
+          git commit -m "chore: bump version to ${UPSTREAM_VERSION}-mcp-use.1" || true
+          git push origin "$BRANCH_NAME"
+          
+          # Create PR
+          gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "Sync with upstream ${UPSTREAM_VERSION}" \
+            --body "## 🔄 Upstream Sync
+          
+          Syncs fork with upstream @modelcontextprotocol/sdk ${UPSTREAM_VERSION}
+          
+          ### 📦 Changes
+          
+          - **Upstream Version**: ${UPSTREAM_VERSION}
+          - **Fork Version**: ${UPSTREAM_VERSION}-mcp-use.1
+          
+          ### ⚠️ Review Required
+          
+          Please review the changes to ensure:
+          - [ ] Edge runtime support (PR #1209) is preserved
+          - [ ] All mcp-use specific modifications are maintained
+          - [ ] No breaking changes introduced
+          - [ ] Tests pass
+          
+          ### 🔗 References
+          
+          - [Upstream Repository](https://github.com/modelcontextprotocol/typescript-sdk)
+          - [Upstream Changelog](https://github.com/modelcontextprotocol/typescript-sdk/releases)
+          
+          ---
+          
+          🤖 *This PR was automatically created by the sync workflow*" || echo "PR already exists or failed to create"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create release tag
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          UPSTREAM_VERSION="${{ steps.check.outputs.upstream_version }}"
+          
+          # Wait a moment to ensure PR branch is fully pushed
+          sleep 5
+          
+          # Create tag on the PR branch
+          git tag "v${UPSTREAM_VERSION}-mcp-use.1" || echo "Tag already exists"
+          git push origin "v${UPSTREAM_VERSION}-mcp-use.1" || echo "Tag push failed or already exists"
+          
+          echo "ℹ️ Tag v${UPSTREAM_VERSION}-mcp-use.1 created on branch. Merge PR to publish to main."
+
