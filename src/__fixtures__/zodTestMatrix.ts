@@ -1,5 +1,5 @@
-import * as z3 from 'zod/v3';
-import * as z4 from 'zod/v4';
+import z3 from 'zod/v3';
+import z4 from 'zod/v4';
 
 // Shared Zod namespace type that exposes the common surface area used in tests.
 export type ZNamespace = typeof z3 & typeof z4;

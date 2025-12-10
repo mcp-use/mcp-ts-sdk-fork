@@ -1,6 +1,6 @@
 {
   "name": "@mcp-use/modelcontextprotocol-sdk",
-  "version": "1.24.3-mcp-use.1",
+  "version": "1.24.3-mcp-use.2",
   "description": "MCP TypeScript SDK fork with edge runtime support - maintained by mcp-use",
   "license": "MIT",
   "publishConfig": {
