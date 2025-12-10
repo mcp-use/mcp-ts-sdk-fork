@@ -1,39 +1,38 @@
 name: Publish to npm
 
 on:
-  push:
-    tags:
-      - 'v*'
+    push:
+        tags:
+            - 'v*'
 
 permissions:
-  id-token: write  # Required for OIDC trusted publishing
-  contents: read
+    id-token: write # Required for OIDC trusted publishing
+    contents: read
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+    publish:
+        runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  registry-url: 'https://registry.npmjs.org'
 
-      # Ensure npm 11.5.1 or later is installed for trusted publishing
-      - name: Update npm
-        run: npm install -g npm@latest
+            # Ensure npm 11.5.1 or later is installed for trusted publishing
+            - name: Update npm
+              run: npm install -g npm@latest
 
-      - run: npm ci
+            - run: npm ci
 
-      - name: Build
-        run: npm run build
+            - name: Build
+              run: npm run build
 
-      - name: Run tests
-        run: npm test
-        continue-on-error: true
+            - name: Run tests
+              run: npm test
+              continue-on-error: true
 
-      - name: Publish to npm
-        run: npm publish --access public --tag latest
-
+            - name: Publish to npm
+              run: npm publish --access public --tag latest
