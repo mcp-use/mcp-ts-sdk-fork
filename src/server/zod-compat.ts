@@ -6,8 +6,8 @@
 import type * as z3 from 'zod/v3';
 import type * as z4 from 'zod/v4/core';
 
-import * as z3rt from 'zod/v3';
-import * as z4mini from 'zod/v4-mini';
+import z3rt from 'zod/v3';
+import z4mini from 'zod/v4-mini';
 
 // --- Unified schema types ---
 export type AnySchema = z3.ZodTypeAny | z4.$ZodType;

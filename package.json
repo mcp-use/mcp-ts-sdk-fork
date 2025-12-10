@@ -1,8 +1,11 @@
 {
-  "name": "@modelcontextprotocol/sdk",
-  "version": "1.24.3-mcp-use.1",
-  "description": "Model Context Protocol implementation for TypeScript",
+  "name": "@mcp-use/modelcontextprotocol-sdk",
+  "version": "1.24.3-mcp-use.2",
+  "description": "MCP TypeScript SDK fork with edge runtime support - maintained by mcp-use",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Anthropic, PBC (https://anthropic.com)",
   "homepage": "https://modelcontextprotocol.io",
   "bugs": "https://github.com/modelcontextprotocol/typescript-sdk/issues",
