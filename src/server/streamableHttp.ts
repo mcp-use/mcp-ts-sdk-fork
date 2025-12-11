@@ -4,14 +4,14 @@ import {
     MessageExtraInfo,
     RequestInfo,
     isInitializeRequest,
-    isJSONRPCError,
     isJSONRPCRequest,
-    isJSONRPCResponse,
+    isJSONRPCResultResponse,
     JSONRPCMessage,
     JSONRPCMessageSchema,
     RequestId,
     SUPPORTED_PROTOCOL_VERSIONS,
-    DEFAULT_NEGOTIATED_PROTOCOL_VERSION
+    DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+    isJSONRPCErrorResponse
 } from '../types.js';
 import getRawBody from 'raw-body';
 import contentType from 'content-type';
@@ -794,19 +794,32 @@ export class StreamableHTTPServerTransport implements Transport {
         return true;
     }
 
+    /**
+     * Validates the MCP-Protocol-Version header on incoming requests.
+     *
+     * For initialization: Version negotiation handles unknown versions gracefully
+     * (server responds with its supported version).
+     *
+     * For subsequent requests with MCP-Protocol-Version header:
+     * - Accept if in supported list
+     * - 400 if unsupported
+     *
+     * For HTTP requests without the MCP-Protocol-Version header:
+     * - Accept and default to the version negotiated at initialization
+     */
     private validateProtocolVersion(req: IncomingMessage, res: ServerResponse): boolean {
-        let protocolVersion = req.headers['mcp-protocol-version'] ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
+        let protocolVersion = req.headers['mcp-protocol-version'];
         if (Array.isArray(protocolVersion)) {
             protocolVersion = protocolVersion[protocolVersion.length - 1];
         }
 
-        if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+        if (protocolVersion !== undefined && !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
             res.writeHead(400).end(
                 JSON.stringify({
                     jsonrpc: '2.0',
                     error: {
                         code: -32000,
-                        message: `Bad Request: Unsupported protocol version (supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')})`
+                        message: `Bad Request: Unsupported protocol version: ${protocolVersion} (supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')})`
                     },
                     id: null
                 })
@@ -858,7 +871,7 @@ export class StreamableHTTPServerTransport implements Transport {
 
     async send(message: JSONRPCMessage, options?: { relatedRequestId?: RequestId }): Promise<void> {
         let requestId = options?.relatedRequestId;
-        if (isJSONRPCResponse(message) || isJSONRPCError(message)) {
+        if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
             // If the message is a response, use the request ID from the message
             requestId = message.id;
         }
@@ -868,7 +881,7 @@ export class StreamableHTTPServerTransport implements Transport {
         // Those will be sent via dedicated response SSE streams
         if (requestId === undefined) {
             // For standalone SSE streams, we can only send requests and notifications
-            if (isJSONRPCResponse(message) || isJSONRPCError(message)) {
+            if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
                 throw new Error('Cannot send a response on a standalone SSE stream unless resuming a previous client request');
             }
 
@@ -911,7 +924,7 @@ export class StreamableHTTPServerTransport implements Transport {
             }
         }
 
-        if (isJSONRPCResponse(message) || isJSONRPCError(message)) {
+        if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
             this._requestResponseMap.set(requestId, message);
             const relatedIds = Array.from(this._requestToStreamMapping.entries())
                 .filter(([_, streamId]) => this._streamMapping.get(streamId) === response)
